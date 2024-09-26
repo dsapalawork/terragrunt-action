@@ -111,6 +111,7 @@ function setup_permissions {
   local -r gid="${3}"
 
   if [[ -e "${dir}" ]]; then
+      log "setting ownership for ${dir} to ${uid}:${gid}"
       sudo chown -R "$uid:$gid" "${dir}"
       sudo chmod -R o+rw "${dir}"
   fi
