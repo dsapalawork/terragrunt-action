@@ -65,7 +65,9 @@ function install_terragrunt {
 # terragrunt_exit_code exit code of terragrunt command
 function run_terragrunt {
   local -r dir="$1"
-  local -r command=("$2")
+  local command
+  IFS=" " read -r -a command <<< "$2"
+  readonly command
 
   # terragrunt_log_file can be used later as file with execution output
   terragrunt_log_file=$(mktemp)
