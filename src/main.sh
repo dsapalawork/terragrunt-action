@@ -65,7 +65,7 @@ function install_terragrunt {
 # terragrunt_exit_code exit code of terragrunt command
 function run_terragrunt {
   local -r dir="$1"
-  local -r command=($2)
+  local -r command=("$2")
 
   # terragrunt_log_file can be used later as file with execution output
   terragrunt_log_file=$(mktemp)
@@ -181,7 +181,7 @@ function main {
   local -r action_user=$(whoami)
 
   setup_permissions "${tg_dir}" "${action_user}" "${action_user}"
-  trap 'setup_permissions $tg_dir $uid $guid' EXIT
+  trap 'setup_permissions $tg_dir $uid $gid' EXIT
   setup_pre_exec
 
   if [[ -n "${tf_version}" ]]; then
@@ -214,8 +214,10 @@ function main {
       # split command and arguments to insert -auto-approve
       if [[ $tg_arg_and_commands =~ $approvePattern ]]; then
           local matchedCommand="${BASH_REMATCH[0]}"
-          local remainingArgs="${tg_arg_and_commands#$matchedCommand}"
-          tg_arg_and_commands="${matchedCommand} -auto-approve ${remainingArgs}"
+          local remainingArgs="${tg_arg_and_commands#"$matchedCommand"}"
+          # remove leading whitespace characters from remainingArgs
+          local strippedRemainingArgs="${remainingArgs#"${remainingArgs%%[![:space:]]*}"}"
+          tg_arg_and_commands="${matchedCommand} -auto-approve ${strippedRemainingArgs}"
       fi
     fi
   fi
