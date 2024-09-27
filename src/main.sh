@@ -156,8 +156,8 @@ function cleanup_and_exit {
   if [ -n "$tg_dir" ] && [ -n "$uid" ] && [ -n "$gid" ]; then
     setup_permissions "$tg_dir" "$uid" "$gid"
   fi
-  rm -rf "$log_file"
-  log "Finished Terragrunt Action execution"
+  [ -n "$log_file" ] && rm -rf -- "$log_file"
+  log "Finished Terragrunt Action Execution"
 }
 
 function main {
@@ -198,7 +198,7 @@ function main {
 
   setup_permissions "${tg_dir}" "${action_user}" "${action_user}"
   # shellcheck disable=SC2064 # we want to expand these vars when trap is defined
-  trap "cleanup_and_exit '$tg_dir' '$uid' '$gid'" EXIT
+  trap "cleanup_and_exit $tg_dir $uid $gid" EXIT
   setup_pre_exec
 
   if [[ -n "${tf_version}" ]]; then
@@ -247,7 +247,7 @@ function main {
 
   local -r log_file="${terragrunt_log_file}"
   # shellcheck disable=SC2064 # we want to expand these vars when trap is defined
-  trap "cleanup_and_exit '$tg_dir' '$uid' '$gid' '$log_file'" EXIT
+  trap "cleanup_and_exit $tg_dir $uid $gid $log_file" EXIT
 
   local exit_code
   exit_code=$(("${terragrunt_exit_code}"))
