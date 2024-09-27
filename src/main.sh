@@ -148,7 +148,7 @@ function setup_post_exec {
 
 # shellcheck disable=SC2317 # used for trap
 function cleanup_and_exit {
-  if [ -d "$tg_dir" ] && [ -n "$uid" ] && [ -n "$gid" ]; then
+  if [ -n "$tg_dir" ] && [ -n "$uid" ] && [ -n "$gid" ]; then
     setup_permissions "$tg_dir" "$uid" "$gid"
   fi
   rm -rf "$log_file"
