@@ -50,7 +50,7 @@ trap_modify() {
 
     trap -- "$(
       [ -n "$prepend_cmd" ] && printf '%s\n' "$prepend_cmd"
-      eval "trap_extract $(trap -p "$signal")"
+      eval "trap_extract $existing_trap"
       [ -n "$append_cmd" ] && printf '%s\n' "$append_cmd"
     )" "$signal" || (echo "unable to $op to trap for $signal" >&2 && return 1)
   done
@@ -212,7 +212,7 @@ function setup_post_exec {
 }
 
 function main {
-  log "Starting Terragrunt Action"
+  log "Starting Terragrunt Action Execution"
   trap_append 'log "Finished Terragrunt Action Execution"' EXIT
   local -r tf_version=${INPUT_TF_VERSION}
   local -r tg_version=${INPUT_TG_VERSION}
@@ -248,8 +248,7 @@ function main {
   local -r action_user=$(whoami)
 
   setup_permissions "${tg_dir}" "${action_user}" "${action_user}"
-  # shellcheck disable=SC2064 # we want to expand these vars when trap is defined
-  trap_append "setup_permissions \"$tg_dir\" \"$user_id\" \"$group_id\"" EXIT
+  trap_append "setup_permissions ""$tg_dir"" ""$user_id"" ""$group_id""" EXIT
   setup_pre_exec
 
   if [[ -n "${tf_version}" ]]; then
@@ -281,11 +280,11 @@ function main {
       local approvePattern="^(apply|destroy|run-all apply|run-all destroy)"
       # split command and arguments to insert -auto-approve
       if [[ $tg_arg_and_commands =~ $approvePattern ]]; then
-          local matchedCommand="${BASH_REMATCH[0]}"
-          local remainingArgs="${tg_arg_and_commands#"$matchedCommand"}"
-          # remove leading whitespace characters from remainingArgs
-          local strippedRemainingArgs="${remainingArgs#"${remainingArgs%%[![:space:]]*}"}"
-          tg_arg_and_commands="${matchedCommand} -auto-approve ${strippedRemainingArgs}"
+        local matchedCommand="${BASH_REMATCH[0]}"
+        local remainingArgs="${tg_arg_and_commands#"$matchedCommand"}"
+        # remove leading whitespace characters from remainingArgs
+        local strippedRemainingArgs="${remainingArgs#"${remainingArgs%%[![:space:]]*}"}"
+        tg_arg_and_commands="${matchedCommand} -auto-approve ${strippedRemainingArgs}"
       fi
     fi
   fi
