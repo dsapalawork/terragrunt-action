@@ -148,11 +148,6 @@ function setup_post_exec {
 
 # shellcheck disable=SC2317 # used for trap
 function cleanup_and_exit {
-  local -r tg_dir="${1:-}"
-  local -r uid="${2:-}"
-  local -r gid="${3:-}"
-  local -r log_file="${4:-}"
-
   if [ -d "$tg_dir" ] && [ -n "$uid" ] && [ -n "$gid" ]; then
     setup_permissions "$tg_dir" "$uid" "$gid"
   fi
