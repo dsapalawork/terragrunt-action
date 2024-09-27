@@ -2,6 +2,71 @@
 set -e
 [[ "${TRACE}" == "1" ]] && set -x
 
+# extract existing trap for signal
+# shellcheck disable=SC2317 # used in traps
+trap_extract() {
+  local -r trap_cmd="${1:-}"
+  [ "$trap_cmd" == 'trap' ] || (echo "${FUNCNAME[0]} 1st arg (trap cmd) must be 'trap'" >&2 && return 1)
+  local -r dashes="${2:-}"
+  [ "$dashes" == '--' ] || (echo "${FUNCNAME[0]} 2nd arg (separator) must be '--'" >&2 && return 1)
+  local -r cmd="${3:-}"
+  [ -n "$cmd" ] || (echo "${FUNCNAME[0]} 3rd arg (cmd) must not be empty" >&2 && return 1)
+  local -r signal="${4:-}"
+  [ -n "$signal" ] || (echo "${FUNCNAME[0]} 4th arg (signal) must not be empty" >&2 && return 1)
+
+  printf '%s\n' "$cmd";
+}
+declare -f -t trap_extract
+
+# prepend or append command to existing trap for signal
+# shellcheck disable=SC2317 # used in traps
+trap_modify() {
+  if [ "$#" -lt 3 ]; then
+    echo "${FUNCNAME[0]} requires at least 3 arguments: op, cmd, and signal(s)" >&2 && return 1
+  fi
+
+  local -r op="${1:-}"
+  local -r cmd="${2:-}"
+  shift 2 || (echo "${FUNCNAME[0]} incorrect number of arguments" >&2 && return 1)
+
+  for signal in "$@"; do
+    existing_trap="$(trap -p "$signal")"
+
+    if [ -z "$existing_trap" ]; then
+      # no existing trap, just set it
+      trap -- "$cmd" "$signal" || (echo "unable to trap for $signal" >&2 && return 1)
+      continue
+    fi
+
+    declare prepend_cmd='' append_cmd=''
+    if [ "$op" == 'prepend' ]; then
+      prepend_cmd="$cmd"
+    elif [ "$op" == 'append' ]; then
+      append_cmd="$cmd"
+    else
+      echo "${FUNCNAME[0]} 1st arg (op) must be 'prepend' or 'append'" >&2 && return 1
+    fi
+    readonly prepend_cmd append_cmd
+
+    trap -- "$(
+      [ -n "$prepend_cmd" ] && printf '%s\n' "$prepend_cmd"
+      eval "trap_extract $existing_trap"
+      [ -n "$append_cmd" ] && printf '%s\n' "$append_cmd"
+    )" "$signal" || (echo "unable to $op to trap for $signal" >&2 && return 1)
+  done
+}
+declare -f -t trap_modify
+
+# prepend command to existing trap for signal
+# shellcheck disable=SC2317 # used in traps
+trap_prepend() { trap_modify 'prepend' "$@"; }
+declare -f -t trap_prepend
+
+# append command to existing trap for signal
+# shellcheck disable=SC2317 # used in traps
+trap_append() { trap_modify 'append' "$@"; }
+declare -f -t trap_append
+
 # write log message with timestamp
 function log {
   local -r message="$1"
@@ -65,7 +130,9 @@ function install_terragrunt {
 # terragrunt_exit_code exit code of terragrunt command
 function run_terragrunt {
   local -r dir="$1"
-  local -r command=($2)
+  local command
+  IFS=" " read -r -a command <<< "$2"
+  readonly command
 
   # terragrunt_log_file can be used later as file with execution output
   terragrunt_log_file=$(mktemp)
@@ -145,8 +212,8 @@ function setup_post_exec {
 }
 
 function main {
-  log "Starting Terragrunt Action"
-  trap 'log "Finished Terragrunt Action execution"' EXIT
+  log "Starting Terragrunt Action Execution"
+  trap_append 'log "Finished Terragrunt Action Execution"' EXIT
   local -r tf_version=${INPUT_TF_VERSION}
   local -r tg_version=${INPUT_TG_VERSION}
   local -r tofu_version=${INPUT_TOFU_VERSION}
@@ -155,12 +222,12 @@ function main {
   local -r tg_add_approve=${INPUT_TG_ADD_APPROVE:-1}
   local -r tg_dir=${INPUT_TG_DIR:-.}
 
-  if [[ (-z "${tf_version}") && (-z "${tofu_version}")]]; then
+  if [[ (-z "${tf_version}") && (-z "${tofu_version}") ]]; then
     log "One of tf_version or tofu_version must be set"
     exit 1
   fi
 
-  if [[ (-n "${tf_version}") && (-n "${tofu_version}")]]; then
+  if [[ (-n "${tf_version}") && (-n "${tofu_version}") ]]; then
     log "Only one of tf_version and tofu_version may be set"
     exit 1
   fi
@@ -176,12 +243,12 @@ function main {
   fi
   setup_git
   # fetch the user id and group id under which the github action is running
-  local -r uid=$(stat -c "%u" "/github/workspace")
-  local -r gid=$(stat -c "%g" "/github/workspace")
+  local -r user_id=$(stat -c "%u" "/github/workspace")
+  local -r group_id=$(stat -c "%g" "/github/workspace")
   local -r action_user=$(whoami)
 
   setup_permissions "${tg_dir}" "${action_user}" "${action_user}"
-  trap 'setup_permissions $tg_dir $uid $guid' EXIT
+  trap_append "setup_permissions ""$tg_dir"" ""$user_id"" ""$group_id""" EXIT
   setup_pre_exec
 
   if [[ -n "${tf_version}" ]]; then
@@ -213,21 +280,24 @@ function main {
       local approvePattern="^(apply|destroy|run-all apply|run-all destroy)"
       # split command and arguments to insert -auto-approve
       if [[ $tg_arg_and_commands =~ $approvePattern ]]; then
-          local matchedCommand="${BASH_REMATCH[0]}"
-          local remainingArgs="${tg_arg_and_commands#$matchedCommand}"
-          tg_arg_and_commands="${matchedCommand} -auto-approve ${remainingArgs}"
+        local matchedCommand="${BASH_REMATCH[0]}"
+        local remainingArgs="${tg_arg_and_commands#"$matchedCommand"}"
+        # remove leading whitespace characters from remainingArgs
+        local strippedRemainingArgs="${remainingArgs#"${remainingArgs%%[![:space:]]*}"}"
+        tg_arg_and_commands="${matchedCommand} -auto-approve ${strippedRemainingArgs}"
       fi
     fi
   fi
   run_terragrunt "${tg_dir}" "${tg_arg_and_commands}"
-  setup_permissions "${tg_dir}"
-  setup_permissions "${terragrunt_log_file}"
-  setup_permissions "${GITHUB_OUTPUT}"
+  setup_permissions "${tg_dir}" "${user_id}" "${group_id}"
+  setup_permissions "${terragrunt_log_file}" "${user_id}" "${group_id}"
+  setup_permissions "${GITHUB_OUTPUT}" "${user_id}" "${group_id}"
   # setup permissions for the output files
   setup_post_exec
 
   local -r log_file="${terragrunt_log_file}"
-  trap 'rm -rf ${log_file}' EXIT
+  # shellcheck disable=SC2064 # we want to expand these vars when trap is defined
+  trap_append "rm -rf -- $log_file" EXIT
 
   local exit_code
   exit_code=$(("${terragrunt_exit_code}"))
