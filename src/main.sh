@@ -146,7 +146,6 @@ function setup_post_exec {
   done <<< "$post_exec_vars"
 }
 
-# shellcheck disable=SC2317 # used for trap
 function cleanup_and_exit {
   local -r tg_dir="${1:-}"
   local -r uid="${2:-}"
@@ -277,6 +276,8 @@ ${terragrunt_output}
   local tg_action_output
   tg_action_output=$(clean_multiline_text "${terragrunt_output}")
   echo "tg_action_output=${tg_action_output}" >> "${GITHUB_OUTPUT}"
+
+  cleanup_and_exit "$tg_dir" "$uid" "$gid" "$log_file"
 
   exit $exit_code
 }
