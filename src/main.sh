@@ -249,7 +249,7 @@ function main {
 
   setup_permissions "${tg_dir}" "${action_user}" "${action_user}"
   # shellcheck disable=SC2064 # we want to expand these vars when trap is defined
-  trap_append "setup_permissions $tg_dir $user_id $group_id" EXIT
+  trap_append "setup_permissions \"$tg_dir\" \"$user_id\" \"$group_id\"" EXIT
   setup_pre_exec
 
   if [[ -n "${tf_version}" ]]; then
@@ -290,9 +290,9 @@ function main {
     fi
   fi
   run_terragrunt "${tg_dir}" "${tg_arg_and_commands}"
-  setup_permissions "${tg_dir}"
-  setup_permissions "${terragrunt_log_file}"
-  setup_permissions "${GITHUB_OUTPUT}"
+  setup_permissions "${tg_dir}" "${user_id}" "${group_id}"
+  setup_permissions "${terragrunt_log_file}" "${user_id}" "${group_id}"
+  setup_permissions "${GITHUB_OUTPUT}" "${user_id}" "${group_id}"
   # setup permissions for the output files
   setup_post_exec
 
