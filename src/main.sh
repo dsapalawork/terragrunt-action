@@ -111,7 +111,6 @@ function setup_permissions {
   local -r gid="${3}"
 
   if [[ -e "${dir}" ]]; then
-      log "setting ownership for ${dir} to ${uid}:${gid}"
       sudo chown -R "$uid:$gid" "${dir}"
       sudo chmod -R o+rw "${dir}"
   fi
@@ -147,9 +146,23 @@ function setup_post_exec {
   done <<< "$post_exec_vars"
 }
 
+# shellcheck disable=SC2317 # used for trap
+function cleanup_and_exit {
+  local -r tg_dir="${1:-}"
+  local -r uid="${2:-}"
+  local -r gid="${3:-}"
+  local -r log_file="${4:-}"
+
+  if [ -d "$tg_dir" ] && [ -n "$uid" ] && [ -n "$gid" ]; then
+    setup_permissions "$tg_dir" "$uid" "$gid"
+  fi
+  rm -rf "$log_file"
+  log "Finished Terragrunt Action execution"
+}
+
 function main {
   log "Starting Terragrunt Action"
-  trap 'log "Finished Terragrunt Action execution"' EXIT
+  trap 'cleanup_and_exit' EXIT
   local -r tf_version=${INPUT_TF_VERSION}
   local -r tg_version=${INPUT_TG_VERSION}
   local -r tofu_version=${INPUT_TOFU_VERSION}
@@ -158,12 +171,12 @@ function main {
   local -r tg_add_approve=${INPUT_TG_ADD_APPROVE:-1}
   local -r tg_dir=${INPUT_TG_DIR:-.}
 
-  if [[ (-z "${tf_version}") && (-z "${tofu_version}")]]; then
+  if [[ (-z "${tf_version}") && (-z "${tofu_version}") ]]; then
     log "One of tf_version or tofu_version must be set"
     exit 1
   fi
 
-  if [[ (-n "${tf_version}") && (-n "${tofu_version}")]]; then
+  if [[ (-n "${tf_version}") && (-n "${tofu_version}") ]]; then
     log "Only one of tf_version and tofu_version may be set"
     exit 1
   fi
@@ -184,7 +197,7 @@ function main {
   local -r action_user=$(whoami)
 
   setup_permissions "${tg_dir}" "${action_user}" "${action_user}"
-  trap 'setup_permissions $tg_dir $uid $gid' EXIT
+  trap 'cleanup_and_exit "$tg_dir" "$uid" "$gid"' EXIT
   setup_pre_exec
 
   if [[ -n "${tf_version}" ]]; then
@@ -232,7 +245,7 @@ function main {
   setup_post_exec
 
   local -r log_file="${terragrunt_log_file}"
-  trap 'rm -rf ${log_file}' EXIT
+  trap 'cleanup_and_exit "$tg_dir" "$uid" "$gid" "$log_file"' EXIT
 
   local exit_code
   exit_code=$(("${terragrunt_exit_code}"))
