@@ -243,13 +243,13 @@ function main {
   fi
   setup_git
   # fetch the user id and group id under which the github action is running
-  local -r uid=$(stat -c "%u" "/github/workspace")
-  local -r gid=$(stat -c "%g" "/github/workspace")
+  local -r user_id=$(stat -c "%u" "/github/workspace")
+  local -r group_id=$(stat -c "%g" "/github/workspace")
   local -r action_user=$(whoami)
 
   setup_permissions "${tg_dir}" "${action_user}" "${action_user}"
   # shellcheck disable=SC2064 # we want to expand these vars when trap is defined
-  trap_append "setup_permissions '$tg_dir' '$uid' '$gid'" EXIT
+  trap_append "setup_permissions '$tg_dir' '$user_id' '$group_id'" EXIT
   setup_pre_exec
 
   if [[ -n "${tf_version}" ]]; then
