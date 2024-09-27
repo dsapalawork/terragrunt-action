@@ -3,6 +3,7 @@ set -e
 [[ "${TRACE}" == "1" ]] && set -x
 
 # extract existing trap for signal
+# shellcheck disable=SC2317 # used in traps
 trap_extract() {
   local -r trap_cmd="${1:-}"
   [ "$trap_cmd" == 'trap' ] || (echo "${FUNCNAME[0]} 1st arg (trap cmd) must be 'trap'" >&2 && return 1)
@@ -18,6 +19,7 @@ trap_extract() {
 declare -f -t trap_extract
 
 # prepend or append command to existing trap for signal
+# shellcheck disable=SC2317 # used in traps
 trap_modify() {
   if [ "$#" -lt 3 ]; then
     echo "${FUNCNAME[0]} requires at least 3 arguments: op, cmd, and signal(s)" >&2 && return 1
@@ -56,10 +58,12 @@ trap_modify() {
 declare -f -t trap_modify
 
 # prepend command to existing trap for signal
+# shellcheck disable=SC2317 # used in traps
 trap_prepend() { trap_modify 'prepend' "$@"; }
 declare -f -t trap_prepend
 
 # append command to existing trap for signal
+# shellcheck disable=SC2317 # used in traps
 trap_append() { trap_modify 'append' "$@"; }
 declare -f -t trap_append
 
@@ -207,24 +211,9 @@ function setup_post_exec {
   done <<< "$post_exec_vars"
 }
 
-function cleanup_and_exit {
-  local -r tg_dir="${1:-}"
-  local -r uid="${2:-}"
-  local -r gid="${3:-}"
-  local -r log_file="${4:-}"
-
-  if [ -n "$tg_dir" ] && [ -n "$uid" ] && [ -n "$gid" ]; then
-    setup_permissions "$tg_dir" "$uid" "$gid"
-  fi
-  [ -n "$log_file" ] && rm -rf -- "$log_file"
-  log "Finished Terragrunt Action Execution"
-
-  return;
-}
-
 function main {
   log "Starting Terragrunt Action"
-  trap_append 'log "Finished Terragrunt Action Execution"' RETURN
+  trap_append 'log "Finished Terragrunt Action Execution"' EXIT
   local -r tf_version=${INPUT_TF_VERSION}
   local -r tg_version=${INPUT_TG_VERSION}
   local -r tofu_version=${INPUT_TOFU_VERSION}
@@ -260,7 +249,7 @@ function main {
 
   setup_permissions "${tg_dir}" "${action_user}" "${action_user}"
   # shellcheck disable=SC2064 # we want to expand these vars when trap is defined
-  trap_append "setup_permissions '$tg_dir' '$uid' '$gid'" RETURN
+  trap_append "setup_permissions '$tg_dir' '$uid' '$gid'" EXIT
   setup_pre_exec
 
   if [[ -n "${tf_version}" ]]; then
@@ -309,7 +298,7 @@ function main {
 
   local -r log_file="${terragrunt_log_file}"
   # shellcheck disable=SC2064 # we want to expand these vars when trap is defined
-  trap_append "rm -rf -- '$log_file'" RETURN
+  trap_append "rm -rf -- '$log_file'" EXIT
 
   local exit_code
   exit_code=$(("${terragrunt_exit_code}"))
@@ -338,7 +327,7 @@ ${terragrunt_output}
   tg_action_output=$(clean_multiline_text "${terragrunt_output}")
   echo "tg_action_output=${tg_action_output}" >> "${GITHUB_OUTPUT}"
 
-  return $exit_code
+  exit $exit_code
 }
 
 main "$@"
