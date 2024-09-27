@@ -224,7 +224,7 @@ function cleanup_and_exit {
 
 function main {
   log "Starting Terragrunt Action"
-  trap_append 'log "Finished Terragrunt Action Execution"' EXIT
+  trap_append 'log "Finished Terragrunt Action Execution"' RETURN
   local -r tf_version=${INPUT_TF_VERSION}
   local -r tg_version=${INPUT_TG_VERSION}
   local -r tofu_version=${INPUT_TOFU_VERSION}
@@ -260,7 +260,7 @@ function main {
 
   setup_permissions "${tg_dir}" "${action_user}" "${action_user}"
   # shellcheck disable=SC2064 # we want to expand these vars when trap is defined
-  trap_append "setup_permissions '$tg_dir' '$uid' '$gid'" EXIT
+  trap_append "setup_permissions '$tg_dir' '$uid' '$gid'" RETURN
   setup_pre_exec
 
   if [[ -n "${tf_version}" ]]; then
@@ -309,7 +309,7 @@ function main {
 
   local -r log_file="${terragrunt_log_file}"
   # shellcheck disable=SC2064 # we want to expand these vars when trap is defined
-  trap_append "rm -rf -- '$log_file'" EXIT
+  trap_append "rm -rf -- '$log_file'" RETURN
 
   local exit_code
   exit_code=$(("${terragrunt_exit_code}"))
