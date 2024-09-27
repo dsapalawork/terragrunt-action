@@ -2,6 +2,67 @@
 set -e
 [[ "${TRACE}" == "1" ]] && set -x
 
+# extract existing trap for signal
+trap_extract() {
+  local -r trap_cmd="${1:-}"
+  [ "$trap_cmd" == 'trap' ] || (echo "${FUNCNAME[0]} 1st arg (trap cmd) must be 'trap'" >&2 && return 1)
+  local -r dashes="${2:-}"
+  [ "$dashes" == '--' ] || (echo "${FUNCNAME[0]} 2nd arg (separator) must be '--'" >&2 && return 1)
+  local -r cmd="${3:-}"
+  [ -n "$cmd" ] || (echo "${FUNCNAME[0]} 3rd arg (cmd) must not be empty" >&2 && return 1)
+  local -r signal="${4:-}"
+  [ -n "$signal" ] || (echo "${FUNCNAME[0]} 4th arg (signal) must not be empty" >&2 && return 1)
+
+  printf '%s\n' "$cmd";
+}
+declare -f -t trap_extract
+
+# prepend or append command to existing trap for signal
+trap_modify() {
+  if [ "$#" -lt 3 ]; then
+    echo "${FUNCNAME[0]} requires at least 3 arguments: op, cmd, and signal(s)" >&2 && return 1
+  fi
+
+  local -r op="${1:-}"
+  local -r cmd="${2:-}"
+  shift 2 || (echo "${FUNCNAME[0]} incorrect number of arguments" >&2 && return 1)
+
+  for signal in "$@"; do
+    existing_trap="$(trap -p "$signal")"
+
+    if [ -z "$existing_trap" ]; then
+      # no existing trap, just set it
+      trap -- "$cmd" "$signal" || (echo "unable to trap for $signal" >&2 && return 1)
+      continue
+    fi
+
+    declare prepend_cmd='' append_cmd=''
+    if [ "$op" == 'prepend' ]; then
+      prepend_cmd="$cmd"
+    elif [ "$op" == 'append' ]; then
+      append_cmd="$cmd"
+    else
+      echo "${FUNCNAME[0]} 1st arg (op) must be 'prepend' or 'append'" >&2 && return 1
+    fi
+    readonly prepend_cmd append_cmd
+
+    trap -- "$(
+      [ -n "$prepend_cmd" ] && printf '%s\n' "$prepend_cmd"
+      eval "trap_extract $(trap -p "$signal")"
+      [ -n "$append_cmd" ] && printf '%s\n' "$append_cmd"
+    )" "$signal" || (echo "unable to $op to trap for $signal" >&2 && return 1)
+  done
+}
+declare -f -t trap_modify
+
+# prepend command to existing trap for signal
+trap_prepend() { trap_modify 'prepend' "$@"; }
+declare -f -t trap_prepend
+
+# append command to existing trap for signal
+trap_append() { trap_modify 'append' "$@"; }
+declare -f -t trap_append
+
 # write log message with timestamp
 function log {
   local -r message="$1"
@@ -163,7 +224,7 @@ function cleanup_and_exit {
 
 function main {
   log "Starting Terragrunt Action"
-  trap 'cleanup_and_exit' EXIT
+  trap_append 'log "Finished Terragrunt Action Execution"' EXIT
   local -r tf_version=${INPUT_TF_VERSION}
   local -r tg_version=${INPUT_TG_VERSION}
   local -r tofu_version=${INPUT_TOFU_VERSION}
@@ -199,7 +260,7 @@ function main {
 
   setup_permissions "${tg_dir}" "${action_user}" "${action_user}"
   # shellcheck disable=SC2064 # we want to expand these vars when trap is defined
-  trap "cleanup_and_exit $tg_dir $uid $gid" EXIT
+  trap_append "setup_permissions '$tg_dir' '$uid' '$gid'" EXIT
   setup_pre_exec
 
   if [[ -n "${tf_version}" ]]; then
@@ -248,7 +309,7 @@ function main {
 
   local -r log_file="${terragrunt_log_file}"
   # shellcheck disable=SC2064 # we want to expand these vars when trap is defined
-  trap "cleanup_and_exit $tg_dir $uid $gid $log_file" EXIT
+  trap_append "rm -rf -- '$log_file'" EXIT
 
   local exit_code
   exit_code=$(("${terragrunt_exit_code}"))
@@ -277,9 +338,7 @@ ${terragrunt_output}
   tg_action_output=$(clean_multiline_text "${terragrunt_output}")
   echo "tg_action_output=${tg_action_output}" >> "${GITHUB_OUTPUT}"
 
-  cleanup_and_exit "$tg_dir" "$uid" "$gid" "$log_file"
-
-  exit $exit_code
+  return $exit_code
 }
 
 main "$@"
